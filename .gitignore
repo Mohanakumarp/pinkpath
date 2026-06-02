@@ -1,0 +1,14 @@
+# Local environment files
+/.env
+/backend/.env
+/frontend/.env
+
+# Local backend configuration and storage
+/backend/chroma_db/
+
+# Local Llama / model artifacts
+/backend/*.gguf
+/backend/*.safetensors
+/backend/*.pt
+/backend/*.pth
+/backend/*.onnx
