@@ -6,3 +6,9 @@ llama-index-llms-ollama
 llama-index-embeddings-ollama
 chromadb
 pypdf
+motor 
+bcrypt 
+passlib
+llama-index-vector-stores-mongodb 
+llama-index-readers-web 
+pymongo
