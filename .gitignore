@@ -1,14 +1,14 @@
-# Local environment files
-/.env
-/backend/.env
-/frontend/.env
+# Local Databases
+chroma_db/
+backend/chroma_db/
 
-# Local backend configuration and storage
-/backend/chroma_db/
+# Virtual Environments
+venv/
+env/
+# Ignore Python compiled files
+__pycache__/
+*.pyc
+*.pyo
 
-# Local Llama / model artifacts
-/backend/*.gguf
-/backend/*.safetensors
-/backend/*.pt
-/backend/*.pth
-/backend/*.onnx
+# Ignore the large data folder
+backend/data/
