@@ -33,7 +33,7 @@ Settings.chunk_overlap = 50
 
 def ingest_documents():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_dir = os.getenv("DATA_DIR", os.path.join(base_dir, "data"))
+    data_dir = os.getenv("DATA_DIR", os.path.join(base_dir, "resource"))
     db_dir = os.path.join(base_dir, "chroma_db")
     
     print(f"Searching for PDFs in: {data_dir}")

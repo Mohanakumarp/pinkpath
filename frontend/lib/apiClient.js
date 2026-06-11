@@ -31,6 +31,7 @@ export const sendMessageToBot = async (message) => {
     return data.response;
     
   } catch (error) {
+    console.error("Backend Connection Error:", error);
     if (error?.name === 'AbortError') return "The request timed out.";
     return "I'm having trouble connecting to the backend.";
   }

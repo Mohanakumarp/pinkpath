@@ -9,6 +9,4 @@ pypdf
 motor 
 bcrypt 
 passlib
-llama-index-vector-stores-mongodb 
-llama-index-readers-web 
 pymongo
