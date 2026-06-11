@@ -3,11 +3,11 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons'; // Added Ionicons
 
 const { width } = Dimensions.get('window');
 
 // Mock Data for the Chart (0 = Very Unpleasant, 3 = Neutral, 6 = Very Pleasant)
-// Later, this will be fetched from your Express/MongoDB backend
 const MOCK_DATA = [
   { dayIndex: 1, value: 3, label: 'Neutral', color: '#93709B' },         // Monday
   { dayIndex: 2, value: 4, label: 'Slightly Pleasant', color: '#B85882' }, // Tuesday
@@ -35,10 +35,10 @@ export default function ChartsScreen() {
       {/* Top Navigation */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-          <Text style={styles.closeButtonText}>✕</Text>
+          <Ionicons name="close" size={28} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>State of Mind</Text>
-        <View style={{ width: 30 }} /> {/* Spacer to center title */}
+        <View style={{ width: 28 }} /> {/* Spacer to center title */}
       </View>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -68,7 +68,7 @@ export default function ChartsScreen() {
         {/* --- CUSTOM SCATTER CHART --- */}
         <View style={styles.chartWrapper}>
           
-          {/* Y-Axis Labels (Right Side) */}
+          {/* Y-Axis Labels (Left Side) */}
           <View style={styles.yAxisLabels}>
             <Text style={styles.axisText}>Very{'\n'}Pleasant</Text>
             <Text style={styles.axisText}>Neutral</Text>
@@ -92,7 +92,6 @@ export default function ChartsScreen() {
 
             {/* Plotted Data Points */}
             {MOCK_DATA.map((point, index) => {
-              // Calculate X and Y coordinates based on the 0-6 scale and day index
               const xPos = (usableWidth / 6) * point.dayIndex;
               const yPos = chartHeight - ((point.value / 6) * chartHeight);
 
@@ -149,7 +148,8 @@ export default function ChartsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' }, // Apple Health uses pure black for charts
+  safeArea: { flex: 1, backgroundColor: '#1A1C29' }, // PinkPath Deep Indigo
+  
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -158,29 +158,28 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
   closeButton: { padding: 5 },
-  closeButtonText: { color: '#FFF', fontSize: 20, fontWeight: '300' },
-  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
   container: { paddingHorizontal: 24, paddingBottom: 40 },
   
   // Time Selector
   timeSelector: {
     flexDirection: 'row',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 8,
-    padding: 3,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 4,
     marginBottom: 20,
   },
-  timeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 6 },
-  timeBtnActive: { backgroundColor: '#636366' },
-  timeBtnText: { color: '#FFF', fontSize: 13, fontWeight: '500' },
-  timeBtnTextActive: { fontWeight: '700' },
+  timeBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
+  timeBtnActive: { backgroundColor: '#E91E63' }, // Branded Pink
+  timeBtnText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600' },
+  timeBtnTextActive: { color: '#FFF', fontWeight: '800' },
 
   // Summary Text
   summaryContainer: { marginBottom: 30 },
   entryCount: { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 5 },
-  entryNumber: { color: '#FFF', fontSize: 32, fontWeight: '700' },
-  entryText: { fontSize: 18, fontWeight: '400', color: 'rgba(255,255,255,0.6)' },
-  dateRange: { color: 'rgba(255,255,255,0.5)', fontSize: 14, marginTop: 5 },
+  entryNumber: { color: '#FFF', fontSize: 32, fontWeight: '800' },
+  entryText: { fontSize: 18, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
+  dateRange: { color: '#E91E63', fontSize: 14, fontWeight: '600', marginTop: 5 },
 
   // Chart Styles
   chartWrapper: {
@@ -212,19 +211,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   xAxisText: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 10,
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    fontWeight: '500',
     marginTop: 10,
   },
   yAxisLabels: {
     justifyContent: 'space-between',
-    paddingBottom: 25, // Align with chart height without x-axis
-    paddingLeft: 10,
+    paddingBottom: 25, 
+    paddingLeft: 0,
+    marginRight: 15,
   },
   axisText: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 10,
-    textAlign: 'left',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'right',
   },
   
   // Data Points
@@ -233,7 +235,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.8,
     shadowRadius: 6,
   },
@@ -241,32 +243,37 @@ const styles = StyleSheet.create({
   // Bottom Tabs
   bottomTabs: {
     flexDirection: 'row',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
     padding: 4,
     marginBottom: 20,
   },
-  bottomTabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 16 },
-  bottomTabBtnActive: { backgroundColor: '#3A3A3C' },
-  bottomTabText: { color: '#FFF', fontSize: 13, fontWeight: '500' },
-  bottomTabTextActive: { fontWeight: '700' },
+  bottomTabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 12 },
+  bottomTabBtnActive: { backgroundColor: '#2A2438' }, // Match card surface
+  bottomTabText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600' },
+  bottomTabTextActive: { color: '#E91E63', fontWeight: '700' },
 
   // Data List
   dataListCard: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#2A2438',
     borderRadius: 16,
     padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 4,
   },
   dataListRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  dataListLabel: { color: '#FFF', fontSize: 16, fontWeight: '500' },
-  dataListValue: { color: 'rgba(255,255,255,0.5)', fontSize: 16 },
+  dataListLabel: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  dataListValue: { color: 'rgba(255,255,255,0.6)', fontSize: 16, fontWeight: '500' },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     marginVertical: 15,
   },
 });

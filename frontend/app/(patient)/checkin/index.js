@@ -3,12 +3,12 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function CheckInDashboard() {
   const router = useRouter();
   
   // For now, we hardcode this to false to show the "No Entry" state.
-  // Later, we will fetch this from MongoDB to see if they logged today.
   const hasLoggedToday = false; 
 
   // Gets today's date formatted like "Sun, 7 Jun"
@@ -21,23 +21,22 @@ export default function CheckInDashboard() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backButton}>{'<'} Back</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backContainer}>
+          <Ionicons name="chevron-back" size={28} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>State of Mind</Text>
         <TouchableOpacity>
-          <Text style={styles.calendarIcon}>📅</Text>
+          <Ionicons name="calendar-outline" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
         {/* Date and Log Button Row */}
         <View style={styles.dateRow}>
           <Text style={styles.dateText}>{today}</Text>
           <TouchableOpacity 
             style={styles.logButton}
-            // THIS is what launches your Bloom Animation page!
             onPress={() => router.push('/(patient)/checkin/flow-slider')} 
           >
             <Text style={styles.logButtonText}>Log</Text>
@@ -52,8 +51,8 @@ export default function CheckInDashboard() {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>🌱</Text>
-              <Text style={styles.emptyText}>No Entry</Text>
+              <Ionicons name="flower-outline" size={64} color="#FFF" style={styles.emptyIcon} />
+              <Text style={styles.emptyText}>No Entry Yet</Text>
             </View>
           )}
         </View>
@@ -72,48 +71,64 @@ export default function CheckInDashboard() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#000' }, // Apple Health uses pitch black backgrounds
+  safeArea: { flex: 1, backgroundColor: '#1A1C29' }, // Branded Deep Indigo
+  
   header: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
     paddingHorizontal: 16, 
-    paddingVertical: 12 
+    paddingVertical: 12,
   },
-  backButton: { color: '#FFF', fontSize: 16 },
-  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '600' },
-  calendarIcon: { fontSize: 20 },
+  backContainer: { flexDirection: 'row', alignItems: 'center', marginLeft: -6 }, 
+  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+  
   container: { padding: 16 },
+  
   dateRow: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
-    marginBottom: 20 
+    marginBottom: 24,
+    marginTop: 10,
   },
-  dateText: { color: '#FFF', fontSize: 22, fontWeight: '700' },
+  dateText: { color: '#FFF', fontSize: 26, fontWeight: '800' },
   logButton: { 
-    backgroundColor: '#007AFF', // iOS Blue
-    paddingVertical: 6, 
-    paddingHorizontal: 16, 
-    borderRadius: 16 
+    backgroundColor: '#E91E63', // PinkPath branded Pink
+    paddingVertical: 8, 
+    paddingHorizontal: 20, 
+    borderRadius: 20,
+    shadowColor: '#E91E63',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
-  logButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  logButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  
   card: { 
-    backgroundColor: '#1C1C1E', // Dark gray card
-    borderRadius: 20, 
+    backgroundColor: '#2A2438', // Elevated surface color
+    borderRadius: 24, 
     height: 350, 
     justifyContent: 'center', 
     alignItems: 'center',
-    marginBottom: 20
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 5,
   },
   emptyState: { alignItems: 'center' },
-  emptyIcon: { fontSize: 48, marginBottom: 16, opacity: 0.5 },
-  emptyText: { color: '#636366', fontSize: 18, fontWeight: '600' },
+  emptyIcon: { marginBottom: 16, opacity: 0.2 }, // Subtle faded white
+  emptyText: { color: 'rgba(255,255,255,0.4)', fontSize: 18, fontWeight: '600' },
+  
   chartsButton: { 
-    backgroundColor: '#1C1C1E', 
-    paddingVertical: 16, 
+    backgroundColor: '#2A2438', 
+    paddingVertical: 18, 
     borderRadius: 20, 
-    alignItems: 'center' 
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
-  chartsButtonText: { color: '#007AFF', fontSize: 16, fontWeight: '600' }
+  chartsButtonText: { color: '#E91E63', fontSize: 16, fontWeight: '700' } // Branded pink text
 });

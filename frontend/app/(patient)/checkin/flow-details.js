@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons'; // Imported standard Expo icons
 
 const { width } = Dimensions.get('window');
 
@@ -72,10 +73,10 @@ export default function FlowDetailsScreen() {
       {/* Top Navigation */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => step === 2 ? setStep(1) : router.back()}>
-          <Text style={styles.headerIcon}>{'<'}</Text>
+          <Ionicons name="chevron-back" size={28} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.replace('/(patient)/checkin')}>
-          <Text style={styles.headerIcon}>{'✕'}</Text>
+          <Ionicons name="close" size={28} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
       </View>
 
@@ -95,7 +96,7 @@ export default function FlowDetailsScreen() {
               {step === 1 ? 'What best describes this feeling?' : 'What’s having the biggest impact on you?'}
             </Text>
             <TouchableOpacity>
-              <Text style={styles.infoIcon}>ⓘ</Text>
+              <Ionicons name="information-circle-outline" size={24} color="rgba(255,255,255,0.4)" />
             </TouchableOpacity>
           </View>
 
@@ -154,7 +155,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
-  headerIcon: { color: 'rgba(255,255,255,0.6)', fontSize: 24, fontWeight: '300' },
   container: { paddingHorizontal: 24, paddingBottom: 100, alignItems: 'center' },
   
   // Static Orb Styles
@@ -168,7 +168,6 @@ const styles = StyleSheet.create({
   contentSection: { width: '100%' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: '#FFF', flex: 1, paddingRight: 10 },
-  infoIcon: { color: 'rgba(255,255,255,0.4)', fontSize: 18 },
   
   // Pill Styles
   pillContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
