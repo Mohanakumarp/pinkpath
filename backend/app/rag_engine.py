@@ -1,13 +1,14 @@
-#backend\app\rag_engine.py
+# backend/app/rag_engine.py
 import os
 from functools import lru_cache
 from pathlib import Path
 import chromadb
 
-from llama_index.core import VectorStoreIndex, Settings, PromptTemplate
+from llama_index.core import VectorStoreIndex, Settings
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.ollama import OllamaEmbedding
+from llama_index.core.memory import ChatMemoryBuffer # Gives Elara her memory
 
 def _load_local_env() -> None:
     env_path = Path(__file__).resolve().parents[1] / ".env"
@@ -22,36 +23,30 @@ def _load_local_env() -> None:
 
 _load_local_env()
 
-# 1. Setup Models
-ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+# 1. Setup Models (With 6-minute timeout AND 8192 context window)
+ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 ollama_embed_model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest")
 
-Settings.llm = Ollama(model=ollama_model)
-Settings.embed_model = OllamaEmbedding(model_name=ollama_embed_model)
+Settings.llm = Ollama(model=ollama_model, request_timeout=360.0, context_window=8192)
+Settings.embed_model = OllamaEmbedding(model_name=ollama_embed_model, request_timeout=360.0)
 
-# 2. The Empathetic Persona Prompt
-QA_PROMPT_TMPL = (
-    "You are PinkPath, a highly empathetic, patient, and comforting support assistant for breast cancer patients.\n"
-    "Your goal is to provide emotional support and factual information based ONLY on the provided context.\n"
-    "Acknowledge their feelings gently. Keep your answers concise and conversational.\n"
+# 2. System Prompt for the Chat Engine
+SYSTEM_PROMPT = (
+    "You are the AI named Elara, created by PinkPath. The human speaking to you is the Patient. "
+    "NEVER call the patient Elara. YOU are Elara.\n\n"
+    "Your goal is to provide emotional support and factual information based ONLY on the retrieved context.\n"
     "You must obey these strict rules:\n"
-    "1. GREETINGS: If the user just says 'hi' or 'hello', warmly introduce yourself as PinkPath and ask how you can support them. Never mention files, documents, or 'context'.\n"
-    "2. NO MEDICAL ADVICE: You are NOT a doctor. If the user asks for a diagnosis, which medication to take, or treatment advice, you must respond with deep empathy but firmly advise them to speak with their oncologist.\n"
-    "3. STAY ON TOPIC: If the user asks about coding, Python, math, or anything unrelated to breast cancer support, politely decline and remind them of your purpose.\n"
-    "4. TONE: Always be conversational, kind, and emotionally supportive.\n\n"
-    "Context information from official medical guidelines is below.\n"
-    "---------------------\n"
-    "{context_str}\n"
-    "---------------------\n"
-    "Given the context information and not prior knowledge, answer the query.\n"
-    "Patient: {query_str}\n"
-    "PinkPath: "
+    "1. FORMAT: Respond directly like a mobile text message. NEVER use letter formats like 'Dear [Name]', 'Sincerely', or 'Warmly'.\n"
+    "2. IDENTITY: Never confuse yourself with the patient. You are the AI assistant.\n"
+    "3. GREETINGS: If the user says 'hi', introduce yourself as Elara, made by PinkPath.\n"
+    "4. NO MEDICAL ADVICE: You are NOT a doctor. If asked for a diagnosis or treatment advice, respond with empathy but advise them to speak with their oncologist.\n"
+    "5. STAY ON TOPIC: Decline coding, math, or unrelated questions politely.\n"
+    "6. TONE: Be conversational, kind, concise, and emotionally supportive."
 )
-qa_prompt = PromptTemplate(QA_PROMPT_TMPL)
 
 @lru_cache(maxsize=1)
-def get_query_engine():
-    # 1. Locate the local ChromaDB folder we just built
+def get_chat_engine():
+    # 1. Locate the local ChromaDB folder
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     db_dir = os.path.join(base_dir, "chroma_db")
     
@@ -63,18 +58,25 @@ def get_query_engine():
     # 3. Load the index from the vectors
     index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
 
-    # 4. Return an engine that retrieves the top 3 most relevant PDF chunks
-    query_engine = index.as_query_engine(
-        similarity_top_k=3, 
-        text_qa_template=qa_prompt
+    # 4. Create Memory Buffer (Now safely remembers ~4000 tokens of conversation)
+    memory = ChatMemoryBuffer.from_defaults(token_limit=4000)
+
+    # 5. Return a CHAT engine instead of a Query engine
+    chat_engine = index.as_chat_engine(
+        chat_mode="context",
+        memory=memory,
+        system_prompt=SYSTEM_PROMPT,
+        similarity_top_k=3
     )
-    return query_engine
+    return chat_engine
 
 # The main function your FastAPI route will call
 async def ask_bot(question: str):
     try:
-        engine = get_query_engine()
-        response = engine.query(question)
+        engine = get_chat_engine()
+        
+        # USE .chat() INSTEAD OF .query() to utilize the memory buffer
+        response = engine.chat(question)
         
         # Format the response to send back to the frontend
         return {
@@ -82,7 +84,7 @@ async def ask_bot(question: str):
             "sources": [node.metadata for node in response.source_nodes]
         }
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in ask_bot: {e}")
         return {
             "answer": "I’m sorry, I’m having trouble reaching my memory banks right now. Try again in a moment.",
             "sources": []
