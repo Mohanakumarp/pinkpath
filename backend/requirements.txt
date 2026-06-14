@@ -10,3 +10,4 @@ motor
 bcrypt 
 passlib
 pymongo
+supabase
