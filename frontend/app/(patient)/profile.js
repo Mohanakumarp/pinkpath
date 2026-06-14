@@ -1,13 +1,38 @@
 // frontend/app/(patient)/profile.js
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons'; // Imported standard Expo icons
+import { Ionicons } from '@expo/vector-icons'; 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ProfileScreen() {
-  const handleLogout = () => {
-    // Clear auth tokens here before navigating in production
+  const [profileData, setProfileData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load the user data as soon as the screen opens
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const storedProfile = await AsyncStorage.getItem('user_profile');
+        if (storedProfile) {
+          setProfileData(JSON.parse(storedProfile));
+        }
+      } catch (error) {
+        console.error("Failed to load profile data", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, []);
+
+  const handleLogout = async () => {
+    // 1. Wipe the secure session data from the phone
+    await AsyncStorage.clear();
+    
+    // 2. Redirect securely to the login screen
     router.replace('/(auth)/login');
   };
 
@@ -25,6 +50,18 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
+  // Show a loading spinner while grabbing data from AsyncStorage
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#E91E63" />
+      </SafeAreaView>
+    );
+  }
+
+  // Dynamically grab the first letter of their name for the avatar (fallback to 'U')
+  const initial = profileData?.name ? profileData.name.charAt(0).toUpperCase() : 'U';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -32,10 +69,10 @@ export default function ProfileScreen() {
         {/* Header & Avatar */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>S</Text>
+            <Text style={styles.avatarText}>{initial}</Text>
           </View>
-          <Text style={styles.userName}>Sarah J.</Text>
-          <Text style={styles.userEmail}>sarah@example.com</Text>
+          <Text style={styles.userName}>{profileData?.name || 'PinkPath User'}</Text>
+          <Text style={styles.userEmail}>{profileData?.phone_number || 'No phone linked'}</Text>
         </View>
 
         {/* Settings Group */}
@@ -63,7 +100,6 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#1A1C29' },
   container: { flexGrow: 1, padding: 24, paddingBottom: 40 },
   
-  // Header / Avatar Area
   header: { alignItems: 'center', marginTop: 20, marginBottom: 40 },
   avatarContainer: {
     width: 80,
@@ -74,13 +110,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 2,
-    borderColor: '#E91E63', // Branded Pink ring
+    borderColor: '#E91E63', 
   },
   avatarText: { color: '#E91E63', fontSize: 32, fontWeight: '700' },
   userName: { fontSize: 24, fontWeight: '700', color: '#FFF', marginBottom: 4 },
   userEmail: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
 
-  // Settings Card Group
   cardGroup: {
     backgroundColor: '#2A2438',
     borderRadius: 16,
@@ -88,7 +123,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   
-  // Rows
   settingsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -105,14 +139,13 @@ const styles = StyleSheet.create({
   
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginLeft: 50 }, 
   
-  // Logout & Footer
   logoutButton: { 
     backgroundColor: 'rgba(255,59,48,0.1)', 
     height: 56, 
     borderRadius: 16, 
     justifyContent: 'center', 
     alignItems: 'center', 
-    marginTop: 'auto', // Pushes to the bottom
+    marginTop: 'auto',
     borderWidth: 1,
     borderColor: 'rgba(255,59,48,0.3)',
   },
