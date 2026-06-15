@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from typing import List,Optional
 # Import your Chatbot engine
 from app.rag_engine import ask_bot 
 load_dotenv()
@@ -38,9 +39,15 @@ class CheckInRequest(BaseModel):
     intensity_level: str
     specific_emotion: str
     cause_category: str
+    created_at: Optional[str]=None
+
+class ChatMessageItem(BaseModel):
+    role: str
+    content: str
 
 class ChatRequest(BaseModel):
     message: str
+    history: List[ChatMessageItem] = [] 
 
 # --- 1. AUTHENTICATION ROUTES ---
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -123,7 +130,7 @@ async def login_user(login_data: LoginRequest):
 @router.post("/checkins")
 async def create_checkin(checkin: CheckInRequest):
     try:
-        data = checkin.dict()
+        data = checkin.dict(exclude_none=True)
         # FIX 1: Change supabase to supabase_admin
         result = supabase_admin.table("check_ins").insert(data).execute() 
         
@@ -166,7 +173,8 @@ async def get_profile(user_id: str):
 # --- 4. CHATBOT ROUTES ---
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest):
-    bot_response = await ask_bot(request.message)
+    # Pass the history array into your ask_bot function
+    bot_response = await ask_bot(request.message, request.history)
     
     return {
         "response": bot_response["answer"],

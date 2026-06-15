@@ -1,7 +1,8 @@
 // frontend/app/(patient)/chat.js
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendMessageToBot } from '../../lib/apiClient';
 
 export default function ChatbotScreen() {
@@ -15,6 +16,33 @@ export default function ChatbotScreen() {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
 
+  // --- 1. Load Chat History on Mount ---
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      try {
+        const savedChat = await AsyncStorage.getItem('elara_chat_history');
+        if (savedChat) {
+          setMessages(JSON.parse(savedChat));
+        }
+      } catch (error) {
+        console.error("Failed to load chat history", error);
+      }
+    };
+    loadChatHistory();
+  }, []);
+
+  // --- 2. Save Chat History on Change ---
+  useEffect(() => {
+    const saveChatHistory = async () => {
+      try {
+        await AsyncStorage.setItem('elara_chat_history', JSON.stringify(messages));
+      } catch (error) {
+        console.error("Failed to save chat history", error);
+      }
+    };
+    saveChatHistory();
+  }, [messages]);
+
   const canSend = useMemo(() => input.trim().length > 0 && !isSending, [input, isSending]);
 
   const handleSend = async () => {
@@ -25,16 +53,26 @@ export default function ChatbotScreen() {
     setIsSending(true);
 
     const userMessage = { id: `user-${Date.now()}`, role: 'user', text: message };
-    setMessages((prev) => [...prev, userMessage]);
+    
+    // Create the updated array immediately so we can pass it to the bot
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
 
     try {
-      const responseText = await sendMessageToBot(message);
+      // Map the UI "text" property to the "content" property the backend expects
+      const historyForApi = updatedMessages.map(msg => ({
+        role: msg.role,
+        content: msg.text
+      }));
+
+      // Pass BOTH the new message and the history array to the backend
+      const responseText = await sendMessageToBot(message, historyForApi);
+      
       setMessages((prev) => [
         ...prev,
         { id: `assistant-${Date.now()}`, role: 'assistant', text: responseText },
       ]);
     } catch (error) {
-      // Basic error handling so the user isn't stuck waiting forever if the local model is slow
       setMessages((prev) => [
         ...prev,
         { id: `error-${Date.now()}`, role: 'assistant', text: "I'm having a little trouble connecting right now. Please give me a moment and try again." },
@@ -107,7 +145,6 @@ export default function ChatbotScreen() {
                 {isSending ? (
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
-                  // Using an arrow symbol for a clean, modern look instead of the word "Send"
                   <Text style={styles.sendButtonText}>↑</Text> 
                 )}
               </TouchableOpacity>
@@ -120,10 +157,8 @@ export default function ChatbotScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Core Background matching the CheckIn flow
   safeArea: { flex: 1, backgroundColor: '#1A1C29' }, 
   
-  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -150,18 +185,16 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#4CAF50', // Green dot
+    backgroundColor: '#4CAF50', 
     borderWidth: 2,
     borderColor: '#1A1C29',
   },
   headerTitle: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   headerSubtitle: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 },
 
-  // Chat Area Styles
   chatContainer: { flex: 1 },
   chatList: { padding: 20, gap: 16, paddingBottom: 10 },
   
-  // Bubble Styles
   messageBubble: { 
     maxWidth: '82%', 
     borderRadius: 22, 
@@ -170,27 +203,24 @@ const styles = StyleSheet.create({
   },
   userBubble: { 
     alignSelf: 'flex-end', 
-    backgroundColor: '#E91E63', // Branded PinkPath Pink
+    backgroundColor: '#E91E63', 
     borderBottomRightRadius: 6 
   },
   assistantBubble: { 
     alignSelf: 'flex-start', 
-    backgroundColor: '#2A2438', // Deep Purple-Gray
+    backgroundColor: '#2A2438', 
     borderBottomLeftRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)'
   },
   
-  // Text inside bubbles
   messageText: { fontSize: 16, lineHeight: 24 },
   userText: { color: '#FFF' },
   assistantText: { color: 'rgba(255,255,255,0.9)' },
   
-  // Typing Indicator
   typingContainer: { paddingHorizontal: 25, paddingBottom: 10 },
   typingText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontStyle: 'italic' },
 
-  // Input Composer Styles
   composer: { 
     paddingHorizontal: 16, 
     paddingVertical: 12, 
@@ -222,5 +252,5 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   sendButtonDisabled: { opacity: 0.4 },
-  sendButtonText: { color: '#FFF', fontWeight: '800', fontSize: 22, marginTop: -2 }, // Aligns the arrow visually
+  sendButtonText: { color: '#FFF', fontWeight: '800', fontSize: 22, marginTop: -2 }, 
 });

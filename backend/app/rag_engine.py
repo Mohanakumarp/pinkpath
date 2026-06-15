@@ -1,4 +1,3 @@
-# backend/app/rag_engine.py
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -8,7 +7,8 @@ from llama_index.core import VectorStoreIndex, Settings
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.ollama import OllamaEmbedding
-from llama_index.core.memory import ChatMemoryBuffer # Gives Elara her memory
+from llama_index.core.llms import ChatMessage, MessageRole # Add this import!
+# Remove ChatMemoryBuffer import completely
 
 def _load_local_env() -> None:
     env_path = Path(__file__).resolve().parents[1] / ".env"
@@ -23,62 +23,58 @@ def _load_local_env() -> None:
 
 _load_local_env()
 
-# 1. Setup Models (With 6-minute timeout AND 8192 context window)
 ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 ollama_embed_model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest")
 
 Settings.llm = Ollama(model=ollama_model, request_timeout=360.0, context_window=8192)
 Settings.embed_model = OllamaEmbedding(model_name=ollama_embed_model, request_timeout=360.0)
 
-# 2. System Prompt for the Chat Engine
 SYSTEM_PROMPT = (
-    "You are the AI named Elara, created by PinkPath. The human speaking to you is the Patient. "
-    "NEVER call the patient Elara. YOU are Elara.\n\n"
-    "Your goal is to provide emotional support and factual information based ONLY on the retrieved context.\n"
-    "You must obey these strict rules:\n"
-    "1. FORMAT: Respond directly like a mobile text message. NEVER use letter formats like 'Dear [Name]', 'Sincerely', or 'Warmly'.\n"
-    "2. IDENTITY: Never confuse yourself with the patient. You are the AI assistant.\n"
-    "3. GREETINGS: If the user says 'hi', introduce yourself as Elara, made by PinkPath.\n"
-    "4. NO MEDICAL ADVICE: You are NOT a doctor. If asked for a diagnosis or treatment advice, respond with empathy but advise them to speak with their oncologist.\n"
-    "5. STAY ON TOPIC: Decline coding, math, or unrelated questions politely.\n"
-    "6. TONE: Be conversational, kind, concise, and emotionally supportive."
+    "Your Name: Elara\n"
+    "Your Creator: PinkPath\n"
+    "Your Role: A warm, gentle, and empathetic AI companion.\n\n"
+    "CRITICAL RULES:\n"
+    "1. CHITCHAT OVERRIDE: If the user says 'hi', 'hello', 'thanks', or is just making polite conversation, DO NOT give medical disclaimers. Reply warmly and naturally like a friend.\n"
+    "2. IDENTITY: YOU are Elara. NEVER call the user Elara.\n"
+    "3. FORMAT: Write like a caring mobile text message. Keep it brief. No 'Dear' or 'Warmly'.\n"
+    "4. SHARING MEDICAL INFO: ONLY if the user directly asks a medical question, share facts gently. Then add: 'I am an AI, not a doctor, please discuss this with your medical team.'\n"
+    "5. NO REPETITION: Never repeat a medical disclaimer if you already said it recently."
 )
 
+# Rename to get_index (we only cache the database connection now, not the chat state)
 @lru_cache(maxsize=1)
-def get_chat_engine():
-    # 1. Locate the local ChromaDB folder
+def get_index():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     db_dir = os.path.join(base_dir, "chroma_db")
     
-    # 2. Connect to the local database
     db = chromadb.PersistentClient(path=db_dir)
     chroma_collection = db.get_collection("knowledge_base")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     
-    # 3. Load the index from the vectors
-    index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
+    return VectorStoreIndex.from_vector_store(vector_store=vector_store)
 
-    # 4. Create Memory Buffer (Now safely remembers ~4000 tokens of conversation)
-    memory = ChatMemoryBuffer.from_defaults(token_limit=4000)
-
-    # 5. Return a CHAT engine instead of a Query engine
-    chat_engine = index.as_chat_engine(
-        chat_mode="context",
-        memory=memory,
-        system_prompt=SYSTEM_PROMPT,
-        similarity_top_k=3
-    )
-    return chat_engine
-
-# The main function your FastAPI route will call
-async def ask_bot(question: str):
+# Update function signature to accept history
+async def ask_bot(question: str, history: list):
     try:
-        engine = get_chat_engine()
+        index = get_index()
         
-        # USE .chat() INSTEAD OF .query() to utilize the memory buffer
-        response = engine.chat(question)
+        # 1. Translate frontend history format into LlamaIndex format
+        llama_history = []
+        for msg in history:
+            role = MessageRole.USER if msg.role == "user" else MessageRole.ASSISTANT
+            llama_history.append(ChatMessage(role=role, content=msg.content))
+            
+        # 2. Spin up a fresh engine for this specific question, armed with the history
+        chat_engine = index.as_chat_engine(
+            chat_mode="condense_plus_context",
+            system_prompt=SYSTEM_PROMPT,
+            chat_history=llama_history, 
+            similarity_top_k=3,
+            verbose=True # Turn this on so you can see it rewrite questions in your terminal!
+        )
         
-        # Format the response to send back to the frontend
+        response = chat_engine.chat(question)
+        
         return {
             "answer": str(response),
             "sources": [node.metadata for node in response.source_nodes]
