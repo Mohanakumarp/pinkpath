@@ -6,11 +6,11 @@
 // - Continuous breathing pulse lives here too (independent of swipe)
 // - Halo rings fade in for positive moods
 // - Background theme, petal colour, core colour all respond to the displayed day's mood
-// - All swipe / date-nav / fetch / routing logic is unchanged
+// - SCROLLVIEW REMOVED: Everything is strictly sized to fit the screen bounds perfectly.
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity,
   Platform, Animated, Dimensions, PanResponder, Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -201,10 +201,11 @@ export default function CheckInDashboard() {
     outputRange: [1.0, 1.08],
   });
 
-  // ── pan responder (unchanged logic) ────────────────────────────────────────
+  // ── pan responder ──────────────────────────────────────────────────────────
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 20,
+      onPanResponderGrant: () => {},
       onPanResponderMove: Animated.event([null, { dx: pan.x }], { useNativeDriver: false }),
       onPanResponderRelease: (_, gs) => {
         if (gs.dx > 100) {
@@ -227,6 +228,10 @@ export default function CheckInDashboard() {
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         }
       },
+      onPanResponderTerminate: () => {
+        Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+      },
+      onPanResponderTerminationRequest: () => true,
     })
   ).current;
 
@@ -246,31 +251,35 @@ export default function CheckInDashboard() {
   return (
     <Animated.View style={[styles.mainWrapper, { backgroundColor }]}>
       <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
 
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>State of Mind</Text>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-
-          <View style={styles.dateNavRow}>
-            <Text style={styles.dateText}>{displayDate}</Text>
-            <Text style={styles.swipeHint}>← swipe to change day →</Text>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>State of Mind</Text>
           </View>
 
-          {!currentCheckin && !isFuture && (
-            <TouchableOpacity
-              style={styles.logButton}
-              onPress={() => router.push({
-                pathname: '/(patient)/checkin/flow-slider',
-                params: { targetDate: getSafeDateString(selectedDate) },
-              })}
-            >
-              <Text style={styles.logButtonText}>
-                {isToday ? 'Log Your Mood' : `Log for ${displayDate.split(',')[0]}`}
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* Date Indicator Row */}
+          <View style={styles.dateNavRow}>
+            <Text style={styles.dateText}>{displayDate}</Text>
+            <Text style={styles.swipeHint}>← swipe card to change day →</Text>
+          </View>
+
+          {/* Conditional Log Mood Button Container */}
+          <View style={styles.logButtonWrapper}>
+            {!currentCheckin && !isFuture && (
+              <TouchableOpacity
+                style={styles.logButton}
+                onPress={() => router.push({
+                  pathname: '/(patient)/checkin/flow-slider',
+                  params: { targetDate: getSafeDateString(selectedDate) },
+                })}
+              >
+                <Text style={styles.logButtonText}>
+                  {isToday ? 'Log Your Mood' : `Log for ${displayDate.split(',')[0]}`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* ── swipeable card ── */}
           <Animated.View
@@ -301,7 +310,7 @@ export default function CheckInDashboard() {
                     },
                   ]} />
 
-                  {/* animated scale wrapper → same breathe+slider-driven scale */}
+                  {/* animated scale wrapper */}
                   <Animated.View style={{ transform: [{ scale: flowerScale }] }}>
                     <FlowerSVG moodIndex={moodIndex} />
                   </Animated.View>
@@ -319,20 +328,23 @@ export default function CheckInDashboard() {
               </View>
             ) : (
               <View style={styles.emptyState}>
-                <Ionicons name="flower-outline" size={64} color="#FFF" style={styles.emptyIcon} />
+                <Ionicons name="flower-outline" size={60} color="#FFF" style={styles.emptyIcon} />
                 <Text style={styles.emptyText}>No Entry for this Day</Text>
               </View>
             )}
           </Animated.View>
 
-          <TouchableOpacity
-            style={styles.chartsButton}
-            onPress={() => router.push('/(patient)/checkin/charts')}
-          >
-            <Text style={styles.chartsButtonText}>Show in Charts</Text>
-          </TouchableOpacity>
+          {/* Bottom Action Section */}
+          <View style={styles.bottomSection}>
+            <TouchableOpacity
+              style={styles.chartsButton}
+              onPress={() => router.push('/(patient)/checkin/charts')}
+            >
+              <Text style={styles.chartsButtonText}>Show in Charts</Text>
+            </TouchableOpacity>
+          </View>
 
-        </ScrollView>
+        </View>
       </SafeAreaView>
     </Animated.View>
   );
@@ -343,19 +355,28 @@ const styles = StyleSheet.create({
   mainWrapper: { flex: 1 },
   safeArea:    { flex: 1 },
 
-  header:      { alignItems: 'center', paddingVertical: 12 },
+  // Fills the viewport and cleanly splits elements vertically
+  container: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
+  },
+
+  header:      { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
   headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 0.8 },
 
-  container: { padding: 16 },
-
-  dateNavRow: { alignItems: 'center', marginBottom: 20, marginTop: 10 },
+  dateNavRow: { alignItems: 'center', marginVertical: 4 },
   dateText:   { color: '#FFF', fontSize: 26, fontWeight: '800' },
-  swipeHint:  { color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 5, letterSpacing: 0.5 },
+  swipeHint:  { color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 4, letterSpacing: 0.5 },
 
+  // Wrapper maintains structure height consistency even if button hides
+  logButtonWrapper: { minHeight: 54, justifyContent: 'center', marginVertical: 4 },
   logButton: {
     backgroundColor: '#E91E63',
-    paddingVertical: 14, borderRadius: 20,
-    alignItems: 'center', marginBottom: 20,
+    paddingVertical: 14,
+    borderRadius: 20,
+    alignItems: 'center',
     shadowColor: '#E91E63',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35, shadowRadius: 10,
@@ -363,14 +384,16 @@ const styles = StyleSheet.create({
   },
   logButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 
+  // Flex grow ensures card maximizes its space safely within screen constraints
   card: {
+    flex: 1,
     backgroundColor: 'rgba(42,36,56,0.85)',
     borderRadius: 28,
-    minHeight: 420,
+    marginVertical: 8,
+    maxHeight: 460,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    padding: 24,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.25, shadowRadius: 24,
@@ -378,19 +401,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
   },
-  cardContent: { alignItems: 'center', width: '100%' },
+  cardContent: { alignItems: 'center', width: '100%', justifyContent: 'center' },
   cardSubtitle: {
     color: 'rgba(255,255,255,0.45)', fontSize: 11,
-    fontWeight: '700', letterSpacing: 2, marginBottom: 12,
+    fontWeight: '700', letterSpacing: 2, marginBottom: 8,
   },
 
-  // flower container — enough room for halo rings
   visualizerContainer: {
-    width: FLOWER_SIZE + 60,
-    height: FLOWER_SIZE + 60,
+    width: FLOWER_SIZE + 40,
+    height: FLOWER_SIZE + 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 12,
+    marginVertical: 8,
   },
   haloRing: {
     position: 'absolute',
@@ -409,11 +431,11 @@ const styles = StyleSheet.create({
 
   emotionTitle: {
     color: '#FFF', fontSize: 22, fontWeight: '700',
-    textAlign: 'center', marginBottom: 6,
+    textAlign: 'center', marginBottom: 4,
   },
   moodDescription: {
     color: 'rgba(255,255,255,0.75)', fontSize: 15,
-    textAlign: 'center', marginBottom: 6,
+    textAlign: 'center', marginBottom: 4,
   },
   causeCategory: {
     color: 'rgba(255,255,255,0.45)', fontSize: 13,
@@ -421,12 +443,13 @@ const styles = StyleSheet.create({
   },
 
   emptyState: { alignItems: 'center' },
-  emptyIcon:  { marginBottom: 16, opacity: 0.2 },
+  emptyIcon:  { marginBottom: 12, opacity: 0.2 },
   emptyText:  { color: 'rgba(255,255,255,0.4)', fontSize: 18, fontWeight: '600' },
 
+  bottomSection: { width: '100%', paddingBottom: 4 },
   chartsButton: {
     backgroundColor: 'rgba(42,36,56,0.85)',
-    paddingVertical: 18, borderRadius: 20,
+    paddingVertical: 16, borderRadius: 20,
     alignItems: 'center',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
   },
