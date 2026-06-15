@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getBackendUrl = () => {
   if (Platform.OS === 'web') return process.env.EXPO_PUBLIC_BACKEND_URL_WEB || 'http://127.0.0.1:8000';
-  return process.env.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.1.100:8000'; 
+  return process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.4:8000'; 
 };
 
 const MOOD_DATA = [
@@ -25,7 +25,10 @@ const LIFE_IMPACTS = ['Health', 'Fitness', 'Self-Care', 'Treatment', 'Pain', 'Ho
 
 export default function FlowDetailsScreen() {
   const router = useRouter();
-  const { moodIndex } = useLocalSearchParams();
+  
+  // FIX: Destructure targetDate from the params so we can save it to the DB
+  const { moodIndex, targetDate } = useLocalSearchParams();
+  
   const currentIndex = moodIndex ? parseInt(moodIndex, 10) : 3; 
   const currentMood = MOOD_DATA[currentIndex];
 
@@ -51,11 +54,13 @@ export default function FlowDetailsScreen() {
         const userId = await AsyncStorage.getItem('user_id');
         const BACKEND_URL = getBackendUrl();
         
+        // FIX: Inject created_at into the payload if targetDate exists
         const payload = {
           user_id: userId,
-          intensity_level: String(currentIndex), // Send the numeric level as string for DB
+          intensity_level: String(currentIndex),
           specific_emotion: selectedWords.join(', ') || 'None',
-          cause_category: selectedImpacts.join(', ') || 'None'
+          cause_category: selectedImpacts.join(', ') || 'None',
+          ...(targetDate && { created_at: targetDate }) // Spreads created_at into the object
         };
 
         const response = await fetch(`${BACKEND_URL}/checkins`, {
