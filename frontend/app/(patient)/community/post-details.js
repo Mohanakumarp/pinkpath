@@ -1,85 +1,141 @@
 // frontend/app/(patient)/community/post-details.js
-import React, { useState, useRef } from 'react'; 
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react'; 
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons'; // Imported standard Expo icons
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Mock Data
-const MOCK_POST = {
-  id: '1',
-  author: 'Sarah J.',
-  timeAgo: '2h ago',
-  title: 'Managing radiation fatigue',
-  body: 'I am on week 3 of radiation and the fatigue is hitting me like a truck. Has anyone found specific foods or routines that help get through the midday slump? I feel like I can barely keep my eyes open past 2 PM, and I still have to pick my kids up from school. Any advice is so appreciated right now.',
-  upvotes: 45,
-  hasUpvoted: true,
+const getBackendUrl = () => {
+  if (Platform.OS === 'web') return process.env.EXPO_PUBLIC_BACKEND_URL_WEB || 'http://127.0.0.1:8000';
+  return process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.4:8000'; 
 };
 
-const INITIAL_COMMENTS = [
-  { id: 'c1', author: 'Elena M.', timeAgo: '1h ago', text: 'Small, frequent meals helped me! Think handfuls of almonds, half an apple, or a smoothie. Huge meals made the fatigue way worse.' },
-  { id: 'c2', author: 'Anonymous', timeAgo: '45m ago', text: 'I started taking a 20-minute nap at 1 PM exactly. Do not sleep longer than 30 mins or you will wake up groggy. It gives just enough of a reset for the afternoon.' },
-  { id: 'c3', author: 'Dr. Patel (Verified)', timeAgo: '15m ago', text: 'Staying highly hydrated is also key. Radiation causes cellular breakdown which requires water to flush out. Aim for an extra 30oz a day if your care team permits.' },
-];
+const timeAgo = (dateString) => {
+  if (!dateString) return '';
+  const seconds = Math.floor((new Date() - new Date(dateString)) / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+};
 
 export default function PostDetailsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); 
+  const { id } = useLocalSearchParams(); // The post ID
   
-  const [comments, setComments] = useState(INITIAL_COMMENTS);
+  const [post, setPost] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
   const [input, setInput] = useState('');
-  const [isUpvoted, setIsUpvoted] = useState(MOCK_POST.hasUpvoted);
-  const [upvoteCount, setUpvoteCount] = useState(MOCK_POST.upvotes);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasUpvotedLocally, setHasUpvotedLocally] = useState(false);
 
   const inputRef = useRef(null);
 
-  const handleUpvote = () => {
-    setIsUpvoted(!isUpvoted);
-    setUpvoteCount(isUpvoted ? upvoteCount - 1 : upvoteCount + 1);
+  // Fetch Post and Comments
+  useEffect(() => {
+    const fetchPostDetails = async () => {
+      try {
+        const response = await fetch(`${getBackendUrl()}/community/posts/${id}`);
+        const data = await response.json();
+        if (data.status === 'success') {
+          setPost(data.post);
+          setComments(data.comments || []);
+        }
+      } catch (error) {
+        console.error("Failed to load thread:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPostDetails();
+  }, [id]);
+
+  const handleUpvote = async () => {
+    if (hasUpvotedLocally) return;
+    setHasUpvotedLocally(true);
+    setPost(prev => ({ ...prev, upvotes: (prev.upvotes || 0) + 1 }));
+
+    try {
+      await fetch(`${getBackendUrl()}/community/posts/${id}/upvote`, { method: 'POST' });
+    } catch (error) {
+      console.error("Upvote failed:", error);
+    }
   };
 
-  const handleSend = () => {
+  const handleSendComment = async () => {
     if (!input.trim()) return;
+    setIsSubmitting(true);
     
-    const newComment = {
-      id: `c-${Date.now()}`,
-      author: 'You',
-      timeAgo: 'Just now',
-      text: input.trim(),
-    };
-    
-    setComments([...comments, newComment]);
-    setInput('');
+    try {
+      const userId = await AsyncStorage.getItem('user_id');
+      const payload = {
+        post_id: id,
+        user_id: userId,
+        content: input.trim(),
+        is_anonymous: false // Can add a toggle later if desired
+      };
+
+      const response = await fetch(`${getBackendUrl()}/community/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        // Refetch to get the updated list securely from backend
+        const res = await fetch(`${getBackendUrl()}/community/posts/${id}`);
+        const data = await res.json();
+        setComments(data.comments);
+        setInput('');
+      }
+    } catch (error) {
+      console.error("Failed to post comment:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (isLoading || !post) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#E91E63" />
+      </SafeAreaView>
+    );
+  }
+
+  const authorName = post.users?.name || 'Unknown';
+  const isAnon = authorName === 'Anonymous';
 
   const renderPostHeader = () => (
     <View style={styles.postHeaderContainer}>
       <View style={styles.postMeta}>
         <View style={styles.authorBadge}>
-          <Text style={styles.authorBadgeText}>{MOCK_POST.author.charAt(0)}</Text>
+          <Text style={styles.authorBadgeText}>{authorName.charAt(0)}</Text>
         </View>
-        <Text style={styles.postAuthor}>{MOCK_POST.author}</Text>
-        <Text style={styles.postTime}> • {MOCK_POST.timeAgo}</Text>
+        <Text style={[styles.postAuthor, isAnon && { color: '#E91E63', fontStyle: 'italic' }]}>{authorName}</Text>
+        <Text style={styles.postTime}> • {timeAgo(post.created_at)}</Text>
       </View>
       
-      <Text style={styles.postTitle}>{MOCK_POST.title}</Text>
-      <Text style={styles.postBody}>{MOCK_POST.body}</Text>
+      <Text style={styles.postTitle}>{post.title}</Text>
+      <Text style={styles.postBody}>{post.content}</Text>
       
       <View style={styles.postActions}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleUpvote}>
+        <TouchableOpacity style={styles.actionButton} onPress={handleUpvote} disabled={hasUpvotedLocally}>
           <Ionicons 
-            name={isUpvoted ? "caret-up" : "caret-up-outline"} 
+            name={hasUpvotedLocally ? "caret-up" : "caret-up-outline"} 
             size={18} 
-            color={isUpvoted ? '#E91E63' : 'rgba(255,255,255,0.5)'} 
+            color={hasUpvotedLocally ? '#E91E63' : 'rgba(255,255,255,0.5)'} 
             style={{ marginRight: 6 }} 
           />
-          <Text style={[styles.actionText, isUpvoted && styles.actionTextActive]}>{upvoteCount}</Text>
+          <Text style={[styles.actionText, hasUpvotedLocally && styles.actionTextActive]}>{post.upvotes || 0}</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={() => inputRef.current?.focus()}
-        >
+        <TouchableOpacity style={styles.actionButton} onPress={() => inputRef.current?.focus()}>
           <Ionicons name="chatbubble-outline" size={16} color="rgba(255,255,255,0.5)" style={{ marginRight: 6 }} />
           <Text style={styles.actionText}>{comments.length}</Text>
         </TouchableOpacity>
@@ -102,27 +158,31 @@ export default function PostDetailsScreen() {
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        
         <FlatList
           data={comments}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={renderPostHeader}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View style={styles.commentRow}>
-              <View style={styles.commentAvatar}>
-                <Text style={styles.commentAvatarText}>{item.author.charAt(0)}</Text>
-              </View>
-              <View style={styles.commentContent}>
-                <View style={styles.commentMeta}>
-                  <Text style={styles.commentAuthor}>{item.author}</Text>
-                  <Text style={styles.commentTime}>{item.timeAgo}</Text>
+          renderItem={({ item }) => {
+            const commentAuthor = item.users?.name || 'Unknown';
+            return (
+              <View style={styles.commentRow}>
+                <View style={styles.commentAvatar}>
+                  <Text style={styles.commentAvatarText}>{commentAuthor.charAt(0)}</Text>
                 </View>
-                <Text style={styles.commentText}>{item.text}</Text>
+                <View style={styles.commentContent}>
+                  <View style={styles.commentMeta}>
+                    <Text style={[styles.commentAuthor, commentAuthor === 'Anonymous' && { color: '#E91E63' }]}>
+                      {commentAuthor}
+                    </Text>
+                    <Text style={styles.commentTime}>{timeAgo(item.created_at)}</Text>
+                  </View>
+                  <Text style={styles.commentText}>{item.content}</Text>
+                </View>
               </View>
-            </View>
-          )}
+            );
+          }}
         />
 
         <View style={styles.composer}>
@@ -131,21 +191,20 @@ export default function PostDetailsScreen() {
               ref={inputRef}
               value={input}
               onChangeText={setInput}
-              placeholder="Add a comment..."
+              placeholder="Add a supportive comment..."
               placeholderTextColor="rgba(255,255,255,0.4)"
               style={styles.chatInput}
               multiline
             />
             <TouchableOpacity
-              style={[styles.sendButton, !input.trim() && styles.sendButtonDisabled]}
-              onPress={handleSend}
-              disabled={!input.trim()}
+              style={[styles.sendButton, (!input.trim() || isSubmitting) && styles.sendButtonDisabled]}
+              onPress={handleSendComment}
+              disabled={!input.trim() || isSubmitting}
             >
-               <Ionicons name="arrow-up" size={24} color="#FFF" />
+              {isSubmitting ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="arrow-up" size={24} color="#FFF" />}
             </TouchableOpacity>
           </View>
         </View>
-
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -153,19 +212,9 @@ export default function PostDetailsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#1A1C29' },
-  
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   backButton: { padding: 5 },
   headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
-
   listContent: { paddingBottom: 20 },
 
   postHeaderContainer: { padding: 20, backgroundColor: '#2A2438', marginBottom: 8 },

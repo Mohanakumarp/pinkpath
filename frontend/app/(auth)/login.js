@@ -124,17 +124,17 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.forgotPassword}>
+            {/* <TouchableOpacity style={styles.forgotPassword}>
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
 
-          <View style={styles.footer}>
+          {/* <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity>
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>
-          </View>
+          </View> */}
 
         </View>
       </KeyboardAvoidingView>
