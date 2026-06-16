@@ -51,8 +51,9 @@ export default function LoginScreen() {
 
       // Success! Save the user's ID and Profile locally
       await AsyncStorage.setItem('user_id', data.user.id);
+      await AsyncStorage.setItem('user_email', data.user.email);
       await AsyncStorage.setItem('user_profile', JSON.stringify(data.user.profile));
-
+      
       // Navigate to the main app
       router.replace('/(patient)/checkin');
 
