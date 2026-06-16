@@ -58,6 +58,19 @@ class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessageItem] = [] 
 
+class CreatePostRequest(BaseModel):
+    user_id: str
+    title: str
+    content: str
+    category: str = "General"
+    is_anonymous: bool = False
+
+class CreateCommentRequest(BaseModel):
+    post_id: str
+    user_id: str
+    content: str
+    is_anonymous: bool = False
+
 # --- 1. AUTHENTICATION ROUTES ---
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(register_data: RegisterRequest):
@@ -195,3 +208,117 @@ async def chat_endpoint(request: ChatRequest):
         "response": bot_response["answer"],
         "sources": bot_response["sources"]
     }
+
+# --- 5. COMMUNITY FORUM ROUTES ---
+
+@router.post("/community/posts")
+async def create_community_post(post: CreatePostRequest):
+    try:
+        data = post.dict()
+        # Insert the post using the admin client
+        result = supabase_admin.table("community_posts").insert(data).execute()
+        
+        return {
+            "status": "success",
+            "message": "Post created successfully",
+            "post": result.data[0]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/community/posts")
+async def get_community_feed():
+    try:
+        # Fetch all posts, and securely join the users table to get the author's name
+        # We order by created_at descending so the newest posts are at the top
+        result = supabase_admin.table("community_posts").select(
+            "*, users(name)"
+        ).order("created_at", desc=True).execute()
+        
+        posts = result.data
+        
+        # 🚨 SECURITY SCRUB: Enforce Anonymity
+        for post in posts:
+            if post.get("is_anonymous") == True:
+                # Overwrite the user data so the frontend never even sees the real name
+                post["users"] = {"name": "Anonymous"}
+                
+        return {
+            "status": "success",
+            "posts": posts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/community/posts/{post_id}")
+async def get_post_and_comments(post_id: str):
+    try:
+        # 1. Fetch the specific post
+        post_result = supabase_admin.table("community_posts").select(
+            "*, users(name)"
+        ).eq("id", post_id).execute()
+        
+        if not post_result.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+            
+        post = post_result.data[0]
+        
+        # Scrub post anonymity
+        if post.get("is_anonymous") == True:
+            post["users"] = {"name": "Anonymous"}
+
+        # 2. Fetch all comments for this post
+        comments_result = supabase_admin.table("community_comments").select(
+            "*, users(name)"
+        ).eq("post_id", post_id).order("created_at", desc=False).execute()
+        
+        comments = comments_result.data
+        
+        # Scrub comment anonymity
+        for comment in comments:
+            if comment.get("is_anonymous") == True:
+                comment["users"] = {"name": "Anonymous"}
+                
+        return {
+            "status": "success",
+            "post": post,
+            "comments": comments
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/community/comments")
+async def create_comment(comment: CreateCommentRequest):
+    try:
+        data = comment.dict()
+        result = supabase_admin.table("community_comments").insert(data).execute()
+        
+        return {
+            "status": "success",
+            "message": "Comment added successfully",
+            "comment": result.data[0]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/community/posts/{post_id}/upvote")
+async def upvote_post(post_id: str):
+    try:
+        # First, get the current upvote count
+        post = supabase_admin.table("community_posts").select("upvotes").eq("id", post_id).execute()
+        if not post.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+            
+        current_upvotes = post.data[0].get("upvotes", 0)
+        
+        # Increment by 1 and update
+        result = supabase_admin.table("community_posts").update(
+            {"upvotes": current_upvotes + 1}
+        ).eq("id", post_id).execute()
+        
+        return {
+            "status": "success",
+            "upvotes": result.data[0]["upvotes"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
