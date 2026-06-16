@@ -1,10 +1,16 @@
 // frontend/app/(patient)/profile.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Modal, TextInput, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons'; 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Added helper to connect to your backend
+const getBackendUrl = () => {
+  if (Platform.OS === 'web') return process.env.EXPO_PUBLIC_BACKEND_URL_WEB || 'http://127.0.0.1:8000';
+  return process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.4:8000'; 
+};
 
 export default function ProfileScreen() {
   const [profileData, setProfileData] = useState(null);
@@ -15,7 +21,13 @@ export default function ProfileScreen() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
 
-  // Load the user data as soon as the screen opens
+  // States for Change Password Flow
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -43,7 +55,56 @@ export default function ProfileScreen() {
     router.replace('/(auth)/login');
   };
 
-  // Reverted SettingsRow back to a clean tap target without the switch logic
+  const closeDetailsModal = () => {
+    setShowDetailsModal(false);
+    setIsChangingPassword(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+  };
+
+  const handleUpdatePassword = async () => {
+    setPasswordError('');
+    
+    // Validation
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const userId = await AsyncStorage.getItem('user_id');
+      const response = await fetch(`${getBackendUrl()}/update-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          new_password: newPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to update password.");
+      }
+
+      Alert.alert("Success", "Your password has been updated securely.");
+      setIsChangingPassword(false);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      setPasswordError(error.message);
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   const SettingsRow = ({ iconName, label, value, onPress }) => (
     <TouchableOpacity style={styles.settingsRow} onPress={onPress}>
       <View style={styles.rowLeft}>
@@ -87,9 +148,7 @@ export default function ProfileScreen() {
             label="Personal Details" 
             onPress={() => setShowDetailsModal(true)} 
           />
-          
           <View style={styles.divider} />
-          
           <SettingsRow 
             iconName="document-text-outline" 
             label="Terms & Conditions" 
@@ -114,7 +173,7 @@ export default function ProfileScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Personal Details</Text>
-              <TouchableOpacity onPress={() => setShowDetailsModal(false)}>
+              <TouchableOpacity onPress={closeDetailsModal}>
                 <Ionicons name="close" size={28} color="rgba(255,255,255,0.6)" />
               </TouchableOpacity>
             </View>
@@ -133,6 +192,59 @@ export default function ProfileScreen() {
               <Text style={styles.detailLabel}>Email Address</Text>
               <Text style={styles.detailValue}>{userEmail || 'N/A'}</Text>
             </View>
+            <View style={styles.divider} />
+
+            {/* PASSWORD CHANGE SECTION */}
+            {!isChangingPassword ? (
+              <TouchableOpacity style={styles.changePasswordBtn} onPress={() => setIsChangingPassword(true)}>
+                <Ionicons name="lock-closed-outline" size={20} color="#E91E63" style={{ marginRight: 8 }} />
+                <Text style={styles.changePasswordText}>Change Password</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.passwordForm}>
+                <Text style={styles.passwordFormTitle}>Update Password</Text>
+                
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="New Password"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  secureTextEntry
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                />
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="Confirm New Password"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+                
+                {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+
+                <View style={styles.passwordActions}>
+                  <TouchableOpacity 
+                    style={styles.cancelButton} 
+                    onPress={() => { setIsChangingPassword(false); setPasswordError(''); }}
+                  >
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.saveButton} 
+                    onPress={handleUpdatePassword}
+                    disabled={isUpdatingPassword}
+                  >
+                    {isUpdatingPassword ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={styles.saveText}>Save Password</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
           </View>
         </View>
@@ -248,4 +360,31 @@ const styles = StyleSheet.create({
   detailValue: { color: '#FFF', fontSize: 18, fontWeight: '500' },
   
   termsText: { color: 'rgba(255,255,255,0.8)', fontSize: 15, lineHeight: 24 },
+
+  // --- Password Flow Styles ---
+  changePasswordBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 16, marginTop: 10,
+    backgroundColor: 'rgba(233,30,99,0.1)', borderRadius: 12,
+  },
+  changePasswordText: { color: '#E91E63', fontSize: 16, fontWeight: '600' },
+  
+  passwordForm: { marginTop: 20, padding: 15, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16 },
+  passwordFormTitle: { color: '#FFF', fontSize: 16, fontWeight: '600', marginBottom: 15 },
+  inputField: {
+    backgroundColor: '#1A1C29',
+    color: '#FFF',
+    height: 50,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  errorText: { color: '#FF3B30', fontSize: 13, marginBottom: 10 },
+  passwordActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  cancelButton: { flex: 1, paddingVertical: 14, alignItems: 'center', marginRight: 10, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)' },
+  cancelText: { color: 'rgba(255,255,255,0.6)', fontWeight: '600', fontSize: 15 },
+  saveButton: { flex: 1, paddingVertical: 14, alignItems: 'center', borderRadius: 12, backgroundColor: '#E91E63' },
+  saveText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
 });

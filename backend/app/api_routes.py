@@ -1,13 +1,16 @@
-# backend\app\api_routes.py
+# backend/app/api_routes.py
 import os
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from typing import List,Optional
+from typing import List, Optional
+
 # Import your Chatbot engine
 from app.rag_engine import ask_bot 
+
 load_dotenv()
+
 # --- INITIALIZE SUPABASE HERE ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
@@ -20,6 +23,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # 2. The admin client (strictly for bypassing RLS to insert data)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 # --- START ROUTER ---
 router = APIRouter()
 
@@ -28,11 +32,16 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     phone_number: str
-    name: str # Add this line
+    name: str 
 
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+# ADD THIS NEW MODEL FOR PASSWORD UPDATES
+class UpdatePasswordRequest(BaseModel):
+    user_id: str
+    new_password: str
 
 class CheckInRequest(BaseModel):
     user_id: str
@@ -53,14 +62,11 @@ class ChatRequest(BaseModel):
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(register_data: RegisterRequest):
     try:
-        # Step 1: Create the secure account
         auth_response = supabase.auth.sign_up({
             "email": register_data.email,
             "password": register_data.password
         })
         
-        # --- THE FIX: Catch the fake user object ---
-        # If identities is empty, the email was already taken!
         if auth_response.user and not auth_response.user.identities:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
@@ -75,7 +81,6 @@ async def register_user(register_data: RegisterRequest):
             
         user_id = auth_response.user.id
         
-        # Step 2: Insert into public.users
         profile_data = {
             "id": user_id,
             "phone_number": register_data.phone_number,
@@ -126,12 +131,24 @@ async def login_user(login_data: LoginRequest):
             detail="Incorrect email or password. " + str(e)
         )
 
+# ADD THIS NEW ROUTE FOR PASSWORD UPDATES
+@router.post("/update-password")
+async def update_password(req: UpdatePasswordRequest):
+    try:
+        # Use the admin client to securely update the user's password using their ID
+        supabase_admin.auth.admin.update_user_by_id(
+            req.user_id,
+            {"password": req.new_password}
+        )
+        return {"status": "success", "message": "Password updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # --- 2. CHECK-IN ROUTES ---
 @router.post("/checkins")
 async def create_checkin(checkin: CheckInRequest):
     try:
         data = checkin.dict(exclude_none=True)
-        # FIX 1: Change supabase to supabase_admin
         result = supabase_admin.table("check_ins").insert(data).execute() 
         
         return {
@@ -144,7 +161,6 @@ async def create_checkin(checkin: CheckInRequest):
 @router.get("/checkins/{user_id}")
 async def get_checkins(user_id: str):
     try:
-        # FIX 2: Change supabase to supabase_admin
         result = supabase_admin.table("check_ins").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
         
         return {
@@ -173,7 +189,6 @@ async def get_profile(user_id: str):
 # --- 4. CHATBOT ROUTES ---
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest):
-    # Pass the history array into your ask_bot function
     bot_response = await ask_bot(request.message, request.history)
     
     return {
