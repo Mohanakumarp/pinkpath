@@ -1,14 +1,9 @@
 import os
-from functools import lru_cache
 from pathlib import Path
-import chromadb
 
-from llama_index.core import VectorStoreIndex, Settings
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.llms.ollama import Ollama
-from llama_index.embeddings.ollama import OllamaEmbedding
-from llama_index.core.llms import ChatMessage, MessageRole # Add this import!
-# Remove ChatMemoryBuffer import completely
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
 
 def _load_local_env() -> None:
     env_path = Path(__file__).resolve().parents[1] / ".env"
@@ -23,11 +18,8 @@ def _load_local_env() -> None:
 
 _load_local_env()
 
-ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
-ollama_embed_model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest")
-
-Settings.llm = Ollama(model=ollama_model, request_timeout=360.0, context_window=8192)
-Settings.embed_model = OllamaEmbedding(model_name=ollama_embed_model, request_timeout=360.0)
+# Initialize the new Client
+client = genai.Client()
 
 SYSTEM_PROMPT = (
     "Your Name: Elara\n"
@@ -41,47 +33,65 @@ SYSTEM_PROMPT = (
     "5. NO REPETITION: Never repeat a medical disclaimer if you already said it recently."
 )
 
-# Rename to get_index (we only cache the database connection now, not the chat state)
-@lru_cache(maxsize=1)
-def get_index():
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_dir = os.path.join(base_dir, "chroma_db")
-    
-    db = chromadb.PersistentClient(path=db_dir)
-    chroma_collection = db.get_collection("knowledge_base")
-    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-    
-    return VectorStoreIndex.from_vector_store(vector_store=vector_store)
+chat_config = types.GenerateContentConfig(
+    system_instruction=SYSTEM_PROMPT,
+)
 
-# Update function signature to accept history
+MODEL_ID = "gemini-3.1-flash-lite"
+
 async def ask_bot(question: str, history: list):
     try:
-        index = get_index()
-        
-        # 1. Translate frontend history format into LlamaIndex format
-        llama_history = []
+        gemini_history = []
         for msg in history:
-            role = MessageRole.USER if msg.role == "user" else MessageRole.ASSISTANT
-            llama_history.append(ChatMessage(role=role, content=msg.content))
+            # --- SAFE ATTRIBUTE EXTRACTION ---
+            # Handles both Pydantic/ORM objects and native dicts seamlessly
+            role_val = msg.role if hasattr(msg, 'role') else msg.get('role', 'user')
+            content_val = msg.content if hasattr(msg, 'content') else msg.get('content', '')
             
-        # 2. Spin up a fresh engine for this specific question, armed with the history
-        chat_engine = index.as_chat_engine(
-            chat_mode="condense_plus_context",
-            system_prompt=SYSTEM_PROMPT,
-            chat_history=llama_history, 
-            similarity_top_k=3,
-            verbose=True # Turn this on so you can see it rewrite questions in your terminal!
+            if not content_val or not str(content_val).strip():
+                continue
+            
+            # The new SDK strictly expects 'user' or 'model'
+            role = "user" if role_val == "user" else "model"
+            
+            gemini_history.append(
+                types.Content(
+                    role=role, 
+                    parts=[types.Part.from_text(text=str(content_val))]
+                )
+            )
+            
+        # Gemini STRICTLY requires that chat history begins with the "user".
+        while gemini_history and gemini_history[0].role == "model":
+            gemini_history.pop(0)
+
+        chat = client.aio.chats.create(
+            model=MODEL_ID,
+            config=chat_config,
+            history=gemini_history
         )
         
-        response = chat_engine.chat(question)
+        response = await chat.send_message(question)
         
         return {
-            "answer": str(response),
-            "sources": [node.metadata for node in response.source_nodes]
+            "answer": response.text,
+            "sources": [] 
         }
+        
+    except APIError as e:
+        print(f"\n❌ GEMINI API ERROR [{e.code}]: {e.message}\n")
+        if e.code == 429:
+            return {"answer": "Elara is helping a lot of people right now and I need a quick breather. Please try sending your message again in just a minute. 🌸", "sources": []}
+        elif e.code >= 500:
+            return {"answer": "I'm having a little trouble connecting to my thoughts right now. Give me just a moment and try again.", "sources": []}
+        elif e.code == 400:
+            return {"answer": "I seem to have lost my train of thought! Could we start a new conversation?", "sources": []}
+        else:
+            return {"answer": "I’m having a little trouble connecting right now. Please give me a moment and try again.", "sources": []}
+            
     except Exception as e:
-        print(f"Error in ask_bot: {e}")
+        print(f"\n🚨 PYTHON CRASH in ask_bot: {str(e)}\n")
         return {
-            "answer": "I’m sorry, I’m having trouble reaching my memory banks right now. Try again in a moment.",
+            "answer": "I’m having a little trouble connecting right now. Please give me a moment and try again.",
             "sources": []
         }

@@ -1,18 +1,21 @@
 // frontend/app/(patient)/chat.js
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons'; // Make sure to import icons
 import { sendMessageToBot } from '../../lib/apiClient';
 
 export default function ChatbotScreen() {
-  const [messages, setMessages] = useState([
+  const INITIAL_MESSAGE = [
     { 
       id: 'welcome', 
       role: 'assistant', 
       text: 'Hello. I am Elara. I am here to listen, support you, and provide safe guidance on your PinkPath journey. How are you feeling right now?' 
     }
-  ]);
+  ];
+
+  const [messages, setMessages] = useState(INITIAL_MESSAGE);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
 
@@ -43,6 +46,25 @@ export default function ChatbotScreen() {
     saveChatHistory();
   }, [messages]);
 
+  // --- 3. Clear Chat Feature ---
+  const handleClearChat = () => {
+    Alert.alert(
+      "Clear Conversation",
+      "Are you sure you want to clear your chat history with Elara? This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Clear", 
+          style: "destructive",
+          onPress: async () => {
+            setMessages(INITIAL_MESSAGE);
+            await AsyncStorage.setItem('elara_chat_history', JSON.stringify(INITIAL_MESSAGE));
+          }
+        }
+      ]
+    );
+  };
+
   const canSend = useMemo(() => input.trim().length > 0 && !isSending, [input, isSending]);
 
   const handleSend = async () => {
@@ -54,18 +76,15 @@ export default function ChatbotScreen() {
 
     const userMessage = { id: `user-${Date.now()}`, role: 'user', text: message };
     
-    // Create the updated array immediately so we can pass it to the bot
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
 
     try {
-      // Map the UI "text" property to the "content" property the backend expects
       const historyForApi = updatedMessages.map(msg => ({
         role: msg.role,
         content: msg.text
       }));
 
-      // Pass BOTH the new message and the history array to the backend
       const responseText = await sendMessageToBot(message, historyForApi);
       
       setMessages((prev) => [
@@ -85,19 +104,25 @@ export default function ChatbotScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       
-      {/* Custom Elara Header */}
+      {/* Custom Elara Header with Clear Button */}
       <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          <Text style={styles.avatarText}>E</Text>
-          <View style={styles.onlineDot} />
+        <View style={styles.headerLeft}>
+          <View style={styles.avatarContainer}>
+            <Text style={styles.avatarText}>E</Text>
+            <View style={styles.onlineDot} />
+          </View>
+          <View>
+            <Text style={styles.headerTitle}>Elara</Text>
+            <Text style={styles.headerSubtitle}>PinkPath Support</Text>
+          </View>
         </View>
-        <View>
-          <Text style={styles.headerTitle}>Elara</Text>
-          <Text style={styles.headerSubtitle}>PinkPath Support</Text>
-        </View>
+        
+        {/* NEW: Clear Chat Button */}
+        <TouchableOpacity onPress={handleClearChat} style={styles.clearButton}>
+          <Ionicons name="trash-outline" size={22} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
       </View>
 
-      {/* FIX: Set Android behavior to 'height' */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -123,14 +148,12 @@ export default function ChatbotScreen() {
             )}
           />
 
-          {/* Typing Indicator for when Elara is "thinking" */}
           {isSending && (
             <View style={styles.typingContainer}>
               <Text style={styles.typingText}>Elara is typing...</Text>
             </View>
           )}
 
-          {/* Composer Input Area */}
           <View style={styles.composer}>
             <View style={styles.inputRow}>
               <TextInput
@@ -166,11 +189,16 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between', // Pushes the clear button to the right
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.05)',
     backgroundColor: '#1A1C29',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   avatarContainer: {
     width: 40,
@@ -195,6 +223,10 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   headerSubtitle: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 },
+  
+  clearButton: {
+    padding: 8,
+  },
 
   chatContainer: { flex: 1 },
   chatList: { padding: 20, gap: 16, paddingBottom: 10 },
