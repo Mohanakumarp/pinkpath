@@ -4,10 +4,14 @@ import { Tabs, router } from 'expo-router';
 import { Platform, View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PatientTabsLayout() {
   const [isChecking, setIsChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Fetch dynamic safe area insets to handle varying device bottom navigations
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const verifySession = async () => {
@@ -57,8 +61,9 @@ export default function PatientTabsLayout() {
           backgroundColor: '#1A1C29', 
           borderTopColor: 'rgba(255, 255, 255, 0.05)', 
           elevation: 0, 
-          height: Platform.OS === 'ios' ? 85 : 70, 
-          paddingBottom: Platform.OS === 'ios' ? 30 : 15, 
+          // Dynamically adjust height and padding based on device safe area
+          height: 60 + insets.bottom, 
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 15, 
           paddingTop: 10,
         },
         tabBarActiveTintColor: '#E91E63', 
