@@ -1,7 +1,7 @@
 # backend\main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+# import uvicorn
 # Import your routes (which now handle the Supabase initialization internally)
 from app.api_routes import router as api_router 
 
@@ -24,3 +24,6 @@ app.include_router(api_router)
 @app.get("/")
 def health_check():
     return {"status": "active", "message": "PinkPath Backend is running perfectly with Supabase."}
+
+# if __name__=="__main__":
+#     uvicorn.run(app="main:app",host="0.0.0.0",port=8000,reload=True)
