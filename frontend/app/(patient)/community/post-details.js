@@ -24,22 +24,25 @@ const timeAgo = (dateString) => {
 
 export default function PostDetailsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); // The post ID
+  const { id } = useLocalSearchParams(); 
   
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState(null);
   
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasUpvotedLocally, setHasUpvotedLocally] = useState(false);
 
   const inputRef = useRef(null);
 
-  // Fetch Post and Comments
+  // Fetch Post, Comments, and Current User ID
   useEffect(() => {
     const fetchPostDetails = async () => {
       try {
+        const userId = await AsyncStorage.getItem('user_id');
+        setCurrentUserId(userId);
+
         const response = await fetch(`${getBackendUrl()}/community/posts/${id}`);
         const data = await response.json();
         if (data.status === 'success') {
@@ -56,28 +59,40 @@ export default function PostDetailsScreen() {
   }, [id]);
 
   const handleUpvote = async () => {
-    if (hasUpvotedLocally) return;
-    setHasUpvotedLocally(true);
-    setPost(prev => ({ ...prev, upvotes: (prev.upvotes || 0) + 1 }));
+    if (!currentUserId || !post) return;
+    
+    // Check if they already upvoted based on DB data
+    const hasUpvoted = post.upvoted_by && post.upvoted_by.includes(currentUserId);
+    if (hasUpvoted) return;
+
+    // Optimistic UI update
+    setPost(prev => ({ 
+      ...prev, 
+      upvotes: (prev.upvotes || 0) + 1,
+      upvoted_by: [...(prev.upvoted_by || []), currentUserId]
+    }));
 
     try {
-      await fetch(`${getBackendUrl()}/community/posts/${id}/upvote`, { method: 'POST' });
+      await fetch(`${getBackendUrl()}/community/posts/${id}/upvote`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUserId })
+      });
     } catch (error) {
       console.error("Upvote failed:", error);
     }
   };
 
   const handleSendComment = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !currentUserId) return;
     setIsSubmitting(true);
     
     try {
-      const userId = await AsyncStorage.getItem('user_id');
       const payload = {
         post_id: id,
-        user_id: userId,
+        user_id: currentUserId,
         content: input.trim(),
-        is_anonymous: false // Can add a toggle later if desired
+        is_anonymous: false 
       };
 
       const response = await fetch(`${getBackendUrl()}/community/comments`, {
@@ -110,6 +125,9 @@ export default function PostDetailsScreen() {
 
   const authorName = post.users?.name || 'Unknown';
   const isAnon = authorName === 'Anonymous';
+  
+  // Calculate hasUpvoted for the header rendering
+  const hasUpvoted = post?.upvoted_by && post.upvoted_by.includes(currentUserId);
 
   const renderPostHeader = () => (
     <View style={styles.postHeaderContainer}>
@@ -125,14 +143,14 @@ export default function PostDetailsScreen() {
       <Text style={styles.postBody}>{post.content}</Text>
       
       <View style={styles.postActions}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleUpvote} disabled={hasUpvotedLocally}>
+        <TouchableOpacity style={styles.actionButton} onPress={handleUpvote} disabled={hasUpvoted}>
           <Ionicons 
-            name={hasUpvotedLocally ? "caret-up" : "caret-up-outline"} 
+            name={hasUpvoted ? "caret-up" : "caret-up-outline"} 
             size={18} 
-            color={hasUpvotedLocally ? '#E91E63' : 'rgba(255,255,255,0.5)'} 
+            color={hasUpvoted ? '#E91E63' : 'rgba(255,255,255,0.5)'} 
             style={{ marginRight: 6 }} 
           />
-          <Text style={[styles.actionText, hasUpvotedLocally && styles.actionTextActive]}>{post.upvotes || 0}</Text>
+          <Text style={[styles.actionText, hasUpvoted && styles.actionTextActive]}>{post.upvotes || 0}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.actionButton} onPress={() => inputRef.current?.focus()}>

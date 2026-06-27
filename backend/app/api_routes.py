@@ -71,6 +71,9 @@ class CreateCommentRequest(BaseModel):
     content: str
     is_anonymous: bool = False
 
+class UpvoteRequest(BaseModel):
+    user_id: str    
+
 # --- 1. AUTHENTICATION ROUTES ---
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(register_data: RegisterRequest):
@@ -302,19 +305,31 @@ async def create_comment(comment: CreateCommentRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/community/posts/{post_id}/upvote")
-async def upvote_post(post_id: str):
+async def upvote_post(post_id: str, req: UpvoteRequest):
     try:
-        # First, get the current upvote count
-        post = supabase_admin.table("community_posts").select("upvotes").eq("id", post_id).execute()
+        # 1. Get the current upvote count and the list of users who upvoted
+        post = supabase_admin.table("community_posts").select("upvotes, upvoted_by").eq("id", post_id).execute()
         if not post.data:
             raise HTTPException(status_code=404, detail="Post not found")
             
         current_upvotes = post.data[0].get("upvotes", 0)
+        upvoted_by_list = post.data[0].get("upvoted_by") or []
         
-        # Increment by 1 and update
-        result = supabase_admin.table("community_posts").update(
-            {"upvotes": current_upvotes + 1}
-        ).eq("id", post_id).execute()
+        # 2. Check if the user has already upvoted
+        if req.user_id in upvoted_by_list:
+            return {
+                "status": "success",
+                "message": "User already upvoted this post",
+                "upvotes": current_upvotes
+            }
+            
+        # 3. Add the user to the list and increment the count
+        upvoted_by_list.append(req.user_id)
+        
+        result = supabase_admin.table("community_posts").update({
+            "upvotes": current_upvotes + 1,
+            "upvoted_by": upvoted_by_list
+        }).eq("id", post_id).execute()
         
         return {
             "status": "success",
