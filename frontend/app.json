@@ -1,16 +1,31 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "PinkPath",
+    "slug": "pinkpath",
     "version": "1.0.0",
     "scheme": "pinkpath",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/PinkPath_Logo.png",
     "ios": {
       "supportsTablet": true
     },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/PinkPath_Logo.png", 
+        "backgroundColor": "#1A1C29"
+      },
+      "package": "com.yourname.pinkpath"
+    },
     "plugins": [
-      "expo-router"
-    ]
+      "expo-router",
+      "expo-asset"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8b7695c3-0e3a-4ae3-9713-8f63d86ed636"
+      }
+    }
   }
 }
