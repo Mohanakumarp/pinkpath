@@ -27,6 +27,7 @@ export default function CommunityFeedScreen() {
   const router = useRouter();
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   // Modal States
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -35,11 +36,14 @@ export default function CommunityFeedScreen() {
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch Feed
+  // Fetch Feed and Current User ID
   useFocusEffect(
     useCallback(() => {
-      const fetchPosts = async () => {
+      const initializeData = async () => {
         try {
+          const id = await AsyncStorage.getItem('user_id');
+          setCurrentUserId(id);
+
           const response = await fetch(`${getBackendUrl()}/community/posts`);
           const data = await response.json();
           if (data.status === 'success') {
@@ -51,18 +55,17 @@ export default function CommunityFeedScreen() {
           setIsLoading(false);
         }
       };
-      fetchPosts();
+      initializeData();
     }, [])
   );
 
   const handleCreatePost = async () => {
-    if (!newTitle.trim() || !newContent.trim()) return;
+    if (!newTitle.trim() || !newContent.trim() || !currentUserId) return;
     setIsSubmitting(true);
 
     try {
-      const userId = await AsyncStorage.getItem('user_id');
       const payload = {
-        user_id: userId,
+        user_id: currentUserId,
         title: newTitle.trim(),
         content: newContent.trim(),
         category: "General",
@@ -93,16 +96,27 @@ export default function CommunityFeedScreen() {
   };
 
   const handleUpvote = async (postId) => {
-    // Optimistic UI update
+    if (!currentUserId) return;
+
+    // Optimistic UI update based on database array
     setPosts(posts.map(post => {
       if (post.id === postId) {
-        return { ...post, upvotes: post.upvotes + 1, hasUpvotedLocally: true };
+        const currentUpvotedBy = post.upvoted_by || [];
+        return { 
+          ...post, 
+          upvotes: (post.upvotes || 0) + 1, 
+          upvoted_by: [...currentUpvotedBy, currentUserId] 
+        };
       }
       return post;
     }));
 
     try {
-      await fetch(`${getBackendUrl()}/community/posts/${postId}/upvote`, { method: 'POST' });
+      await fetch(`${getBackendUrl()}/community/posts/${postId}/upvote`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUserId }) 
+      });
     } catch (error) {
       console.error("Upvote failed:", error);
     }
@@ -117,7 +131,6 @@ export default function CommunityFeedScreen() {
           <Text style={styles.headerTitle}>Safe Space</Text>
           <Text style={styles.headerSubtitle}>You are not alone.</Text>
         </View>
-        <Ionicons name="people-outline" size={28} color="rgba(255,255,255,0.2)" />
       </View>
 
       {/* Floating "Create Post" Button */}
@@ -139,18 +152,21 @@ export default function CommunityFeedScreen() {
           renderItem={({ item }) => {
             const authorName = item.users?.name || 'Unknown';
             const isAnon = authorName === 'Anonymous';
+            
+            // Check if the current user's ID is in the database array
+            const hasUpvoted = item.upvoted_by && item.upvoted_by.includes(currentUserId);
 
             return (
               <View style={styles.postCard}>
                 <View style={styles.voteColumn}>
-                  <TouchableOpacity onPress={() => handleUpvote(item.id)} disabled={item.hasUpvotedLocally}>
+                  <TouchableOpacity onPress={() => handleUpvote(item.id)} disabled={hasUpvoted}>
                     <Ionicons 
-                      name={item.hasUpvotedLocally ? "caret-up" : "caret-up-outline"} 
+                      name={hasUpvoted ? "caret-up" : "caret-up-outline"} 
                       size={24} 
-                      color={item.hasUpvotedLocally ? '#E91E63' : 'rgba(255,255,255,0.3)'} 
+                      color={hasUpvoted ? '#E91E63' : 'rgba(255,255,255,0.3)'} 
                     />
                   </TouchableOpacity>
-                  <Text style={[styles.voteCount, item.hasUpvotedLocally && styles.voteCountActive]}>
+                  <Text style={[styles.voteCount, hasUpvoted && styles.voteCountActive]}>
                     {item.upvotes || 0}
                   </Text>
                 </View>
@@ -234,7 +250,6 @@ export default function CommunityFeedScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
     </SafeAreaView>
   );
 }
